@@ -65,7 +65,7 @@ var SliderExample = React.createClass({
           <ReactNative.Slider />
         </SliderContainer>
         <SliderContainer caption='<Slider/> with default style'>
-          <Slider />
+          <Slider leftValue={0.2} rightValue={0.6} />
         </SliderContainer>
         <SliderContainer caption='<Slider/> with min, max and custom tints '>
           <Slider

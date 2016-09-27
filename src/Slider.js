@@ -169,12 +169,14 @@ var Slider = React.createClass({
       trackSize: {width: 0, height: 0},
       thumbSize: {width: 0, height: 0},
       allMeasured: false,
-      value: new Animated.Value(this.props.value),
+      leftValue: new Animated.Value(this.props.leftValue),
+      rightValue: new Animated.Value(this.props.rightValue),
     };
   },
   getDefaultProps() {
     return {
-      value: 0,
+      leftValue: 0.2,
+      rightValue: 0.5,
       minimumValue: 0,
       maximumValue: 1,
       step: 0,
@@ -182,7 +184,7 @@ var Slider = React.createClass({
       maximumTrackTintColor: '#b3b3b3',
       thumbTintColor: '#343434',
       thumbTouchSize: {width: 40, height: 40},
-      debugTouchArea: false,
+      debugTouchArea: true,
       animationType: 'timing'
     };
   },
@@ -198,17 +200,28 @@ var Slider = React.createClass({
     });
   },
   componentWillReceiveProps: function(nextProps) {
-    var newValue = nextProps.value;
+    const newLeftValue = nextProps.leftValue;
+    const newRightValue = nextProps.rightValue;
 
-    if (this.props.value !== newValue) {
+    if (this.props.leftValue !== newLeftValue) {
       if (this.props.animateTransitions) {
-        this._setCurrentValueAnimated(newValue);
+        this._setCurrentValueAnimated('left', newLeftValue);
       }
       else {
-        this._setCurrentValue(newValue);
+        this._setCurrentValue('left', newLeftValue);
+      }
+    }
+
+    if (this.props.rightValue !== newRightValue) {
+      if (this.props.animateTransitions) {
+        this._setCurrentValueAnimated('right', newRightValue);
+      }
+      else {
+        this._setCurrentValue('right', newRightValue);
       }
     }
   },
+
   shouldComponentUpdate: function(nextProps, nextState) {
     // We don't want to re-render in the following cases:
     // - when only the 'value' prop changes as it's already handled with the Animated.Value
@@ -224,7 +237,7 @@ var Slider = React.createClass({
       || !styleEqual(this.props.thumbStyle, nextProps.thumbStyle);
   },
   render() {
-    var {
+    const {
       minimumValue,
       maximumValue,
       minimumTrackTintColor,
@@ -237,13 +250,22 @@ var Slider = React.createClass({
       debugTouchArea,
       ...other
     } = this.props;
-    var {value, containerSize, trackSize, thumbSize, allMeasured} = this.state;
+
+    var {leftValue, rightValue, containerSize, trackSize, thumbSize, allMeasured} = this.state;
     var mainStyles = styles || defaultStyles;
-    var thumbLeft = value.interpolate({
+
+    var thumbLeft = leftValue.interpolate({
         inputRange: [minimumValue, maximumValue],
         outputRange: [0, containerSize.width - thumbSize.width],
         //extrapolate: 'clamp',
       });
+
+    var thumbRight = rightValue.interpolate({
+        inputRange: [minimumValue, maximumValue],
+        outputRange: [0, containerSize.width - thumbSize.width],
+        //extrapolate: 'clamp',
+      });
+
     var valueVisibleStyle = {};
     if (!allMeasured) {
       valueVisibleStyle.opacity = 0;
@@ -305,7 +327,7 @@ var Slider = React.createClass({
 
   _handleStartShouldSetPanResponder: function(e: Object, /*gestureState: Object*/): boolean {
     // Should we become active when the user presses down on the thumb?
-    return this._thumbHitTest(e);
+    return this._thumbHitTest('left', e);
   },
 
   _handleMoveShouldSetPanResponder: function(/*e: Object, gestureState: Object*/): boolean {
@@ -314,16 +336,16 @@ var Slider = React.createClass({
   },
 
   _handlePanResponderGrant: function(/*e: Object, gestureState: Object*/) {
-    this._previousLeft = this._getThumbLeft(this._getCurrentValue());
-    this._fireChangeEvent('onSlidingStart');
+    this._previousLeft = this._getThumb(this._getCurrentValue('left'));
+    this._fireChangeEvent('left', 'onSlidingStart');
   },
   _handlePanResponderMove: function(e: Object, gestureState: Object) {
     if (this.props.disabled) {
       return;
     }
 
-    this._setCurrentValue(this._getValue(gestureState));
-    this._fireChangeEvent('onValueChange');
+    this._setCurrentValue('left', this._getValue(gestureState));
+    this._fireChangeEvent('left', 'onValueChange');
   },
   _handlePanResponderRequestEnd: function(e: Object, gestureState: Object) {
     // Should we allow another component to take over this pan?
@@ -334,8 +356,8 @@ var Slider = React.createClass({
       return;
     }
 
-    this._setCurrentValue(this._getValue(gestureState));
-    this._fireChangeEvent('onSlidingComplete');
+    this._setCurrentValue('left', this._getValue(gestureState));
+    this._fireChangeEvent('left', 'onSlidingComplete');
   },
 
   _measureContainer(x: Object) {
@@ -371,11 +393,12 @@ var Slider = React.createClass({
     }
   },
 
+
   _getRatio(value: number) {
     return (value - this.props.minimumValue) / (this.props.maximumValue - this.props.minimumValue);
   },
 
-  _getThumbLeft(value: number) {
+  _getThumb(value: number) {
     var ratio = this._getRatio(value);
     return ratio * (this.state.containerSize.width - this.state.thumbSize.width);
   },
@@ -401,15 +424,19 @@ var Slider = React.createClass({
     }
   },
 
-  _getCurrentValue() {
-    return this.state.value.__getValue();
+  _getCurrentValue(type) {
+    return type === 'left' ? this.state.leftValue.__getValue() : this.state.rightValue.__getValue();
   },
 
-  _setCurrentValue(value: number) {
-    this.state.value.setValue(value);
+  _setCurrentValue(type, value: number) {
+    if(type === 'left') {
+      this.state.leftValue.setValue(value);
+    } else {
+      this.state.rightValue.setValue(value);
+    }
   },
 
-  _setCurrentValueAnimated(value: number) {
+  _setCurrentValueAnimated(type, value: number) {
     var animationType   = this.props.animationType;
     var animationConfig = Object.assign(
           {},
@@ -418,12 +445,16 @@ var Slider = React.createClass({
           {toValue : value}
         );
 
-    Animated[animationType](this.state.value, animationConfig).start();
+    if(type === 'left') {
+      Animated[animationType](this.state.leftValue, animationConfig).start();
+    } else {
+      Animated[animationType](this.state.rightValue, animationConfig).start();
+    }
   },
 
-  _fireChangeEvent(event) {
+  _fireChangeEvent(type, event) {
     if (this.props[event]) {
-      this.props[event](this._getCurrentValue());
+      this.props[event](this._getCurrentValue(type));
     }
   },
 
@@ -462,19 +493,21 @@ var Slider = React.createClass({
     return touchOverflowStyle;
   },
 
-  _thumbHitTest(e: Object) {
+  _thumbHitTest(type, e: Object) {
     var nativeEvent = e.nativeEvent;
-    var thumbTouchRect = this._getThumbTouchRect();
+    var thumbTouchRect = this._getThumbTouchRect(type);
     return thumbTouchRect.containsPoint(nativeEvent.locationX, nativeEvent.locationY);
   },
 
-  _getThumbTouchRect() {
+  _getThumbTouchRect(type) {
     var state = this.state;
     var props = this.props;
     var touchOverflowSize = this._getTouchOverflowSize();
 
     return new Rect(
-      touchOverflowSize.width / 2 + this._getThumbLeft(this._getCurrentValue()) + (state.thumbSize.width - props.thumbTouchSize.width) / 2,
+      touchOverflowSize.width / 2 +
+        this._getThumb(this._getCurrentValue(type))
+        + (state.thumbSize.width - props.thumbTouchSize.width) / 2,
       touchOverflowSize.height / 2 + (state.containerSize.height - props.thumbTouchSize.height) / 2,
       props.thumbTouchSize.width,
       props.thumbTouchSize.height
